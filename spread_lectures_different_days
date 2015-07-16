@@ -1,0 +1,125 @@
+Sub Spread_Lectures_On_Different_Days()
+
+'creates an equipment item for every course with 1 hour single streamed lectures and attaches it to the constraint profile
+
+Dim Activity As SplusServer.Activity
+Dim Module As SplusServer.Module
+Dim ActivityTemplate As SplusServer.ActivityTemplate
+Dim EquipmentItemName As String
+Dim NewEquipmentItem As SplusServer.EquipmentItem
+Dim cntTemplates As Integer
+Dim CntEquipments As Integer
+Dim EquipmentGroup As SplusServer.EquipmentItemGroup
+Dim tmpEquipmentItem As SplusServer.EquipmentItem
+Dim LinkedActivity As SplusServer.Activity
+Dim JTAActivity As SplusServer.Activity
+Dim VariantActivity As SplusServer.Activity
+Dim JTAVariantActivity As SplusServer.Activity
+Dim Parent As SplusServer.Activity
+Dim ConstraintHostKey As String
+
+cntTemplates = 0
+CntEquipments = 0
+
+'Set up connection
+
+    If app Is Nothing Then
+        Set app = Lib.Splus_Connect()
+    Else
+        If MsgBox("Using open Splus progid: " & progid & vbNewLine & "Ok to continue, Cancel to reset Splus", vbOKCancel) = vbCancel Then
+            Set app = Nothing
+            Set app = Lib.Splus_Connect()
+        End If
+    End If
+    
+ConstraintHostKey = InputBox("Enter the Host Key of the Constraint Profile you want to attach to each Equipment Item: ", "Constraint Profile Host Key", "SpreadOnePerDay1Hr")
+    
+With app.ActiveCollege
+
+    'Create an equipment item group for all the equipment items if one is not found in the image
+
+    If .EquipmentItemGroups.Find("NonConcurrent").Count = 0 Then
+        Set EquipmentGroup = .CreateEquipmentItemGroup
+        EquipmentGroup.Name = "NonConcurrent"
+        EquipmentGroup.HostKey = "NonConcurrent"
+    Else
+        Set EquipmentGroup = .EquipmentItemGroups.Find("NonConcurrent").Item(1)
+    End If
+
+
+    For Each ActivityTemplate In .ActivityTemplates
+        If ActivityTemplate.ActivityType.Name = "Lecture" Then
+            'if there is only one associated activity
+            If ActivityTemplate.LinkedActivities.Count = 1 Then
+                If ActivityTemplate.Duration = 2 Then
+                    Set LinkedActivity = ActivityTemplate.LinkedActivities.Item(1)
+                    EquipmentItemName = Left(ActivityTemplate.Name, InStr(9, ActivityTemplate.Name, "-") - 1)
+                    'Remove any existing equipment items from the equipment items group
+                    If EquipmentGroup.Members.Count <> 0 Then
+                        For Each tmpEquipmentItem In EquipmentGroup.Members
+                            EquipmentGroup.Members.Remove tmpEquipmentItem
+                        Next
+                    End If
+                    'If the equipment item has already been created for that course - attach it to the activity
+                    If .EquipmentItems.Find(EquipmentItemName).Count = 1 Then
+                        EquipmentGroup.Members.Add .EquipmentItems.Find(EquipmentItemName).Item(1)
+                    Else
+                    'Create a new equipment Item
+                        Set NewEquipmentItem = .CreateEquipmentItem
+                        NewEquipmentItem.Name = EquipmentItemName
+                        NewEquipmentItem.HostKey = EquipmentItemName
+                        Set NewEquipmentItem.Department = ActivityTemplate.Department
+                        NewEquipmentItem.ConstraintProfiles.Add .ConstraintProfiles.Find(ConstraintHostKey).Item(1)
+                        EquipmentGroup.Members.Add NewEquipmentItem
+                        CntEquipments = CntEquipments + 1
+                    End If
+                    'Attach the equipment item to the activity
+                    If LinkedActivity.IsJointParent Then
+                        For Each JTAActivity In LinkedActivity.Children
+                            If JTAActivity.IsVariantParent Then
+                                For Each JTAVariantActivity In JTAActivity.Children
+                                    For Each Parent In JTAVariantActivity.JointParents
+                                        If .EquipmentItems.Find(Left(Parent.Name, InStr(9, Parent.Name, "-") - 1)).Count = 1 Then
+                                            EquipmentItemName = Left(Parent.Name, InStr(9, Parent.Name, "-") - 1)
+                                            EquipmentGroup.Members.Add .EquipmentItems.Find(EquipmentItemName).Item(1)
+                                        Else
+                                            EquipmentItemName = Left(JTAVariantActivity.Name, InStr(9, JTAVariantActivity.Name, "-") - 1)
+                                            JTAVariantActivity.SetEquipmentItemRequirementPresets EquipmentGroup.Members
+                                        End If
+                                    Next
+                                Next
+                            Else
+                                For Each Parent In JTAActivity.JointParents
+                                    If .EquipmentItems.Find(Left(Parent.Name, InStr(9, Parent.Name, "-") - 1)).Count = 1 Then
+                                        JTAActivity.SetEquipmentItemRequirementPresets EquipmentGroup.Members
+                                    Else
+                                        JTAActivity.SetEquipmentItemRequirementPresets EquipmentGroup.Members
+                                    End If
+                                Next
+                            End If
+                        Next
+                    ElseIf LinkedActivity.IsVariantParent Then
+                        For Each VariantActivity In LinkedActivity.Children
+                            VariantActivity.SetEquipmentItemRequirementPresets EquipmentGroup.Members
+                        Next
+                    ElseIf LinkedActivity.IsVariantChild Then
+                        'Do nothing
+                    ElseIf LinkedActivity.IsJointChild Then
+                        'Do nothing
+                    Else
+                        LinkedActivity.SetEquipmentItemRequirementPresets EquipmentGroup.Members
+                    End If
+                    cntTemplates = cntTemplates + 1
+                End If
+            End If
+        End If
+    Next
+                
+End With
+            
+
+
+MsgBox CStr(CntEquipments) & " Equipment Items were created and were attached to " & CStr(cntTemplates) & " Activities"
+
+
+End Sub
