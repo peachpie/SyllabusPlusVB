@@ -1,0 +1,27 @@
+Option Explicit
+Global progid As String
+Global app As SplusServer.application
+
+
+Public Function Splus_Connect() As SplusServer.application
+'Requests a progid and uses it to connect to Splus and return the application object
+
+   Const ERR_APP_NOTFOUND As Long = 429
+     
+   'Get the ProgID
+   progid = InputBox("Splus ProgID" & vbNewLine & "Have the image open in Splus Classic to view and save changes", , "Splus")
+   
+   'Test for cancel button press
+   If progid = "" Then End
+   
+   'Connect to SPlus
+   On Error Resume Next
+   Set Splus_Connect = CreateObject(progid & ".application")
+
+   'Check if application exits
+   If Err = ERR_APP_NOTFOUND Then
+      MsgBox "Problem connecting to SPlus application with the given ProgID"
+      End
+   End If
+   
+End Function
