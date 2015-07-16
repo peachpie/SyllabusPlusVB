@@ -1,0 +1,126 @@
+Option Explicit
+
+Sub Remove_Public_Holiday_Activities()
+
+'Removes the week from all teaching activities running on a day and week given by the user.  Does not make any changes to the name of variant activities
+'Set up for a database with 34 teaching periods a day and 52 weeks in a year.  To change the periods in a day simply update the DayPeriods variable
+
+
+Dim Activity As SplusServer.Activity
+Dim i As Long
+Dim j As Integer
+Dim DayPeriods As Integer
+Dim cntActivities As Integer
+Dim NewWeekPattern As SplusServer.WeekInYearPattern
+Dim WeekValue As Boolean
+Dim WeekNumber As Integer
+Dim StrWeekNumber As String
+Dim DayNumber As Integer
+Dim StrDayNumber As String
+Dim dicHolidayActivities As New Scripting.Dictionary
+Dim StartPeriod As Integer
+
+
+cntActivities = 0
+DayPeriods = 34
+
+
+'Set up connection
+
+If app Is Nothing Then
+    Set app = Lib.Splus_Connect()
+Else
+    If MsgBox("Using open Splus progid: " & progid & vbNewLine & "Ok to continue, Cancel to reset Splus", vbOKCancel) = vbCancel Then
+        Set app = Nothing
+        Set app = Lib.Splus_Connect()
+    End If
+End If
+    
+
+
+'Get the WeekNumber
+GetWeekNumber:
+
+StrWeekNumber = InputBox("Please enter the week number of the day to remove:")
+'Check for cancel
+If StrWeekNumber = "" Then
+    Exit Sub
+End If
+WeekNumber = CInt(StrWeekNumber)
+'Check for invalid values
+If WeekNumber < 1 Or WeekNumber > 52 Then
+    MsgBox "The week number must be between 1 and 52. Click OK to enter another value"
+    GoTo GetWeekNumber
+End If
+
+    
+'Get the Day Number
+GetDayNumber:
+
+StrDayNumber = InputBox("Please enter the day number of the day to remove:" & vbNewLine & "Eg. 1 for Monday, 2 for Tuesday etc.")
+'Check for cancel
+If StrDayNumber = "" Then
+    Exit Sub
+End If
+DayNumber = CInt(StrDayNumber)
+'Check for invalid values
+If DayNumber < 1 Or DayNumber > 7 Then
+    MsgBox "The day number must be between 1 and 7. Click OK to enter another value"
+    GoTo GetDayNumber
+End If
+
+
+With app.ActiveCollege
+
+    For Each Activity In .Activities
+    
+        'Get rid of Ad hoc activities and unscheduled activities
+        If Activity.Name Like "/*" Then
+            'Do nothing
+        ElseIf Activity.SchedulingStatus = cpSchedulingStatusTypeNotScheduled Then
+            'Do nothing
+        Else
+            'if activity runs in the selected week
+            If Activity.weekpattern.TestInRange((WeekNumber - 1), 1, True) = True Then
+                'If activity also runs in the selected day then add it to dicHolidayActivities
+                StartPeriod = (DayPeriods * 7 * (WeekNumber - 1))
+                For i = (StartPeriod + (DayPeriods * (DayNumber - 1))) To (StartPeriod + (DayPeriods * DayNumber))
+                    If dicHolidayActivities.Exists(Activity.HostKey) = False Then
+                        If Activity.ScheduledStartPeriods.TestInRange(i, 1, True) = True Then
+                            dicHolidayActivities.Add Activity.HostKey, ""
+                        End If
+                    End If
+                Next
+            End If
+        End If
+            
+        If dicHolidayActivities.Exists(Activity.HostKey) = True Then
+        
+            'make a new week pattern
+            Set NewWeekPattern = .CreateWeekInYearPattern
+            
+            For j = 0 To 51
+            
+                'In the week of public holiday set to False otherwise set to what it is already
+                If j = (WeekNumber - 1) Then
+                    WeekValue = False
+                Else
+                    WeekValue = Activity.weekpattern.PatternAsArray(j)
+                End If
+            
+                'Update Week Pattern
+                NewWeekPattern.SetInRange j, 1, WeekValue
+            Next
+        
+            'Set Activity week pattern to updated pattern
+            Set Activity.weekpattern = NewWeekPattern
+            cntActivities = cntActivities + 1
+        End If
+    Next
+
+End With
+        
+MsgBox "There were " & CStr(cntActivities) & " activities updated."
+
+
+End Sub
