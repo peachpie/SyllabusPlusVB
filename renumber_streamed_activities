@@ -1,0 +1,116 @@
+Sub Renumber_Streamed_Activities_V1()
+'Renumbers streamed activities based on where they are in the week.  Ignores JTA's and Variants
+
+Dim Template As SplusServer.ActivityTemplate
+Dim Activity As SplusServer.Activity
+Dim ActivityCollection As New Collection
+Dim ActivitySTD As Date
+Dim ColActivitySTD As Date
+Dim LeftActivitySTD As Date
+Dim RightActivitySTD
+Dim TimeDiffLeft As Long
+Dim TimeDiffRight As Long
+Dim ActivityNum As String
+Dim OldActivityName As String
+Dim NewActivityName As String
+Dim TemplateCounter As Integer
+Dim i As Integer
+Dim j As Integer
+Dim k As Integer
+
+
+
+TemplateCounter = 0
+
+'Set up connection
+
+If app Is Nothing Then
+    Set app = Lib.Splus_Connect()
+Else
+    If MsgBox("Using open Splus progid: " & progid & vbNewLine & "Ok to continue, Cancel to reset Splus", vbOKCancel) = vbCancel Then
+        Set app = Nothing
+        Set app = Lib.Splus_Connect()
+    End If
+End If
+
+
+With app.ActiveCollege
+
+    For Each Template In .ActivityTemplates
+        If Template.LinkedActivities.Count > 1 Then
+            TemplateCounter = TemplateCounter + 1
+            'Build up a collection of all the linked activities in date order of their first occurence
+            For Each Activity In Template.LinkedActivities
+                If Activity.SchedulingStatus = cpSchedulingStatusTypeScheduled And Activity.IsJointChild = False And Activity.IsVariantChild = False Then
+                    'The activity is scheduled and is not a vairant or JTA
+                    ActivitySTD = Activity.ScheduledStartDateTimes(0)
+                    If ActivityCollection Is Nothing Or ActivityCollection.Count = 0 Then
+                        'The activity is the first one, add it to the colleciton
+                        ActivityCollection.Add Activity.HostKey
+                    ElseIf ActivityCollection.Count = 1 Then
+                        ' The activity is the second one, do a simple check to find out where to insert
+                        ColActivitySTD = .Activities.Find(ActivityCollection.Item(1)).Item(1).ScheduledStartDateTimes(0)
+                        If DateDiff("n", ColActivitySTD, ActivitySTD) >= 0 Then
+                            'Add the new activity after the one already in the collection
+                            ActivityCollection.Add Activity.HostKey, , , 1
+                        Else
+                            'Add the new activity before the one already in the collection
+                            ActivityCollection.Add Activity.HostKey, , 1
+                        End If
+                    ElseIf ActivityCollection.Count > 1 Then
+                        'Do a check which involves checking two adjacent items of the collection at once
+                        For i = 1 To ActivityCollection.Count - 1
+                            LeftActivitySTD = .Activities.Find(ActivityCollection.Item(i)).Item(1).ScheduledStartDateTimes(0)
+                            RightActivitySTD = .Activities.Find(ActivityCollection.Item(i + 1)).Item(1).ScheduledStartDateTimes(0)
+                            TimeDiffLeft = DateDiff("n", LeftActivitySTD, ActivitySTD)
+                            TimeDiffRight = DateDiff("n", RightActivitySTD, ActivitySTD)
+                            If TimeDiffLeft >= 0 And TimeDiffRight >= 0 Then
+                                'Activity is after both items
+                                If i = ActivityCollection.Count - 1 Then
+                                    'This is the last pair
+                                    'The Activity should be added right at the end of the collection
+                                    ActivityCollection.Add Activity.HostKey, , , (i + 1)
+                                    Exit For
+                                Else
+                                    'Try the next position in the collection
+                                End If
+                            ElseIf TimeDiffLeft >= 0 And TimeDiffRight < 0 Then
+                                'Activity is after the first item and before the second.  Add it to the list after the first item
+                                ActivityCollection.Add Activity.HostKey, , , i
+                                Exit For
+                            ElseIf TimeDiffLeft < 0 And TimeDiffRight < 0 Then
+                                'The activity is before both items. Add it to the list before the first item
+                                'This case can only occur when there are only two items in the list
+                                ActivityCollection.Add Activity.HostKey, , i
+                                Exit For
+                            End If
+                        Next
+                    End If
+                End If
+            Next
+            
+            'Rename activities based on where they are in the collection
+            For j = 1 To ActivityCollection.Count
+                OldActivityName = .Activities.Find(ActivityCollection.Item(j)).Item(1).Name
+                NewActivityName = Mid(OldActivityName, 1, InStr(1, OldActivityName, "/")) & Format(j, "00")
+                .Activities.Find(ActivityCollection.Item(j)).Item(1).Name = NewActivityName
+            Next
+            For k = 1 To ActivityCollection.Count
+                ActivityCollection.Remove (1)
+            Next
+            
+        End If
+
+    Next
+    
+        
+End With
+
+                    
+                            
+                                
+                           
+MsgBox CStr(TemplateCounter) & " Templates had their activities renamed"
+ 
+
+End Sub
