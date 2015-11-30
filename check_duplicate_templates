@@ -1,0 +1,44 @@
+Sub Check_Duplicate_Templates()
+
+'Lists templates with duplicate names in sheet 1 of this workbook.  Change the sheet number if you would like to
+'change the output location
+
+Dim CurrentCell As Range
+Dim Temp As SplusServer.ActivityTemplate
+Dim Temp2 As SplusServer.ActivityTemplate
+Dim dicTemplates As New Scripting.Dictionary
+Dim counter As Integer
+
+Set CurrentCell = Sheet1.Range("A1")
+
+'Set up connection
+
+    If app Is Nothing Then
+        Set app = Lib.Splus_Connect()
+    Else
+        If MsgBox("Using open Splus progid: " & progid & vbNewLine & "Ok to continue, Cancel to reset Splus", vbOKCancel) = vbCancel Then
+            Set app = Nothing
+            Set app = Lib.Splus_Connect()
+        End If
+    End If
+
+
+With app.ActiveCollege
+
+    'Check for duplicate Templates
+    For Each Temp In .ActivityTemplates
+        If dicTemplates.Exists(Temp.Name) Then
+            CurrentCell.Offset(0, 0) = Temp.Name
+            Set CurrentCell = CurrentCell.Offset(1, 0)
+            counter = counter + 1
+        Else
+            dicTemplates.Add Temp.Name, ""
+        End If
+    Next
+    
+End With
+
+MsgBox "Templates with duplicate names are in the sheet titled Duplicate Templates:" & counter
+
+
+End Sub
