@@ -1,0 +1,50 @@
+
+Function GetChildActivities(ActivityTemplate As SplusServer.ActivityTemplate) As Collection
+    'Returns the Child activities associated with this template regardless of whether they are ordinary activities,
+    'JTA children, variant children or JTA variant children
+    'If the activity template has no associated activities this funciton returns Nothing
+    
+    Dim AssociatedActivities As Collection
+    Dim Activity As SplusServer.Activity
+    Dim VariantChild As SplusServer.Activity
+    Dim JointChild As SplusServer.Activity
+    Dim JTAVariantChild As SplusServer.Activity
+
+    Set AssociatedActivities = New Collection
+    
+    
+    If AssociatedActivities.count = 0 Then
+        'Do nothing
+    Else
+        For Each Activity In AssociatedActivities
+            AssociatedActivities.Remove Activity
+        Next
+    End If
+    
+    For Each Activity In ActivityTemplate.LinkedActivities
+        If Activity.IsJointParent = True Then
+            For Each JointChild In Activity.Children
+                If JointChild.IsVariantParent = True Then
+                    'Add JTA Variant Grandchild activities
+                    For Each JTAVariantChild In JointChild.Children
+                        AssociatedActivities.Add JTAVariantChild
+                    Next
+                Else
+                    'Add JTA child activities
+                    AssociatedActivities.Add Activity.Children.Item(1)
+                End If
+            Next
+        ElseIf Activity.IsVariantParent = True Then
+            'Add Variant Child Activities
+            For Each VariantChild In Activity.Children
+                AssociatedActivities.Add VariantChild
+            Next
+        Else
+            'The activities are normal activities, add them
+            AssociatedActivities.Add Activity
+        End If
+    Next
+
+    Set GetChildActivities = AssociatedActivities
+
+End Function
