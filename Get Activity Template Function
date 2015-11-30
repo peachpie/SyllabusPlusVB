@@ -1,0 +1,47 @@
+Function GetActivityTemplate(Activity As SplusServer.Activity) As Collection
+    'Returns the Activity Template(s) associated with the activity.  In the case of a jointly taught activity it will return both templates
+    'If the activity is an ad hoc or has no template associated function returns Nothing
+    
+    Dim AssociatedTemplates As Collection
+    Dim VariantParent As SplusServer.Activity
+    Dim JointParent As SplusServer.Activity
+    Dim JTAVariantParent As SplusServer.Activity
+    Dim counter As Integer
+    Dim Template As SplusServer.ActivityTemplate
+    
+    Set AssociatedTemplates = New Collection
+    
+    
+    If AssociatedTemplates.count = 0 Then
+        'Do nothing
+    Else
+        For Each Template In AssociatedTemplates
+            AssociatedTemplates.Remove Template
+        Next
+    End If
+             
+    If Activity.IsVariantChild = True Then
+        If Activity.Parents.Item(1).IsJointChild = True Then
+            'Activity is a Jointly Taught Variant
+            For Each JTAVariantParent In Activity.Parents(1).Parents
+                AssociatedTemplates.Add JTAVariantParent.ActivityTemplate
+            Next
+        Else
+           'Activity is a Variant
+           AssociatedTemplates.Add Activity.Parents(1).ActivityTemplate
+        End If
+    ElseIf Activity.IsJointChild = True Then
+        'Activity is a JTA
+        For Each JointParent In Activity.Parents
+            AssociatedTemplates.Add JointParent.ActivityTemplate
+        Next
+    ElseIf Activity.Module Is Nothing Then
+        'Activity is an Ad Hoc, do nothing
+    Else
+        'Activity is an ordinary course activity
+        AssociatedTemplates.Add Activity.ActivityTemplate
+    End If
+    
+    Set GetActivityTemplate = AssociatedTemplates
+
+End Function
