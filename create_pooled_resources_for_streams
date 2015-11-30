@@ -1,0 +1,125 @@
+Sub Create_Pooled_Resource_for_Streamed_Activities()
+
+'creates an pooled resource for each template with streamed activities and attaches it to each.
+'Number pooled comes from the user text 4 of the activity
+
+'Uses the function GetChildActivities
+
+'Returns a string of problem templates whose user text 4 is either non-numerical, 0, or greater than the number of streams
+'Assumes that template names are unique.  You may want to run 'check_duplicate_templates' prior to running this code
+
+
+Dim Activity As SplusServer.Activity
+Dim Module As SplusServer.Module
+Dim ActivityTemplate As SplusServer.ActivityTemplate
+Dim PooledResourceName As String
+Dim NewPooledResource As SplusServer.PooledResource
+Dim ResourceGroup As SplusServer.PooledResourceGroup
+Dim CntTemplates As Integer
+Dim NumPooled As String
+Dim tmpPooledResource As SplusServer.PooledResource
+Dim ExistingRDs As SplusServer.PooledResourceDistributions
+Dim NewPRDs As SplusServer.PooledResourceDistributions
+Dim tmpPRD As SplusServer.PooledResourceDistribution
+Dim LinkedActivity As SplusServer.Activity
+Dim JTAActivity As SplusServer.Activity
+Dim VariantActivity As SplusServer.Activity
+Dim JTAVariantActivity As SplusServer.Activity
+Dim Parent As SplusServer.Activity
+Dim ProblemTemplates As String
+Dim dicDoneActivities As New Scripting.Dictionary
+
+
+
+CntTemplates = 0
+
+
+'Set up connection
+
+    If app Is Nothing Then
+        Set app = Lib.Splus_Connect()
+    Else
+        If MsgBox("Using open Splus progid: " & progid & vbNewLine & "Ok to continue, Cancel to reset Splus", vbOKCancel) = vbCancel Then
+            Set app = Nothing
+            Set app = Lib.Splus_Connect()
+        End If
+    End If
+    
+    
+With app.ActiveCollege
+
+
+
+    'Set up Pooled Resource Group for resources
+    
+    If .PooledResourceGroups.Find("MaxConcurrent").count = 0 Then
+        Set ResourceGroup = .CreatePooledResourceGroup
+        ResourceGroup.Name = "MaxConcurrent"
+        ResourceGroup.HostKey = "MaxConcurrent"
+    Else
+        Set ResourceGroup = .PooledResourceGroups.Find("MaxConcurrent").Item(1)
+    End If
+
+
+    For Each ActivityTemplate In .ActivityTemplates
+        NumPooled = ActivityTemplate.UserText4
+        If NumPooled = "" Or ActivityTemplate.LinkedActivities Is Nothing Then
+            'Do nothing
+        Else
+            If IsNumeric(NumPooled) = False Or NumPooled = "0" Or ActivityTemplate.LinkedActivities.count < CInt(NumPooled) Then
+                'The template has something non numeric, or 0 or greater than the number of streams in its user text 4
+                ProblemTemplates = ProblemTemplates & ActivityTemplate.Name & ", "
+            Else
+                If dicDoneActivities.Exists(GetChildActivities(ActivityTemplate).Item(1).HostKey) = True Then
+                    'Do nothing, these templates activities are done already
+                Else
+                    'Create a pooled resource for these activities
+                    PooledResourceName = ActivityTemplate.Name & " Pool:" & CStr(NumPooled)
+                    If ResourceGroup.Members.Find(PooledResourceName).count = 0 Then
+                        Set tmpPooledResource = .CreatePooledResource
+                        tmpPooledResource.Name = PooledResourceName
+                        tmpPooledResource.HostKey = PooledResourceName
+                        tmpPooledResource.PoolSize = CInt(NumPooled)
+                        tmpPooledResource.SharedWithAllDepartments = True
+                        ResourceGroup.Members.Add tmpPooledResource
+                        'Now create a pooled resource distribution and add the pooled resource to it
+                        Set tmpPRD = .CreatePooledResourceDistribution
+                        Set tmpPRD.Resource = tmpPooledResource
+                        'Now attach this Resource distribution to the activities associated with the template
+                        For Each Activity In GetChildActivities(ActivityTemplate)
+                            If Activity.GetPooledResourceRequirement Is Nothing Then
+                                'The activity has no existing pooled resources. Create a new Pooled Resource Distributions,
+                                'add the new Distribution and then set the Activity requirement to the updated Distributions
+                                Set NewPRDs = .CreatePooledResourceDistributions
+                                NewPRDs.Add tmpPRD
+                                Activity.SetPooledResourceRequirement NewPRDs
+                                dicDoneActivities.Add Activity.HostKey, ""
+                            Else
+                                'The activity already has existing pooled resources. Get existing Pooled Resource Distributions,
+                                'add the new Distribution and then set the Activity requirement to the updated Distributions
+                                Set ExistingRDs = Activity.GetPooledResourceRequirement
+                                ExistingRDs.Add tmpPRD
+                                Activity.SetPooledResourceRequirement ExistingRDs
+                                dicDoneActivities.Add Activity.HostKey, ""
+                            End If
+                        Next
+                        CntTemplates = CntTemplates + 1
+                    End If
+                End If
+            End If
+        End If
+    Next
+    
+    
+                        
+                                
+                        
+                
+End With
+            
+
+
+MsgBox CStr(CntTemplates) & " templates had their activies attached to a pooled resource.  Problem templates are listed below:" & vbNewLine & ProblemTemplates
+
+
+End Sub
